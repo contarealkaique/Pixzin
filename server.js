@@ -18,10 +18,14 @@ function nickKey(value) { return normalizeNick(value).toLocaleLowerCase('pt-BR')
 function send(ws, payload) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
 }
+function onlinePlayers() {
+  return [...clients.values()].filter(s => s.authenticated).map(s => ({ name: s.name, points: Number(s.points) || 0, wins: Number(s.wins) || 0, credits: Number(s.credits) || 100 })).sort((a,b) => b.points-a.points || b.wins-a.wins).slice(0,50);
+}
 function broadcastPresence() {
   const onlineCount = nicknames.size;
+  const players = onlinePlayers();
   for (const [ws, session] of clients) {
-    if (session.authenticated) send(ws, { type: 'presence', onlineCount });
+    if (session.authenticated) send(ws, { type: 'presence', onlineCount, players });
   }
 }
 function removeFromQueue(ws) {
@@ -77,7 +81,7 @@ wss.on('connection', (ws, req) => {
     ws.close(1008, 'Origin not allowed');
     return;
   }
-  clients.set(ws, { authenticated: false, name: '', peerId: '', roomCode: '' });
+  clients.set(ws, { authenticated: false, name: '', peerId: '', roomCode: '', points: 0, wins: 0, credits: 100 });
 
   ws.on('message', raw => {
     let msg;
@@ -98,7 +102,7 @@ wss.on('connection', (ws, req) => {
       session.authenticated = true;
       session.name = name;
       nicknames.set(key, ws);
-      send(ws, { type: 'login-ok', name, onlineCount: nicknames.size });
+      send(ws, { type: 'login-ok', name, onlineCount: nicknames.size, players: onlinePlayers() });
       broadcastPresence();
       return;
     }
@@ -106,6 +110,13 @@ wss.on('connection', (ws, req) => {
     if (!session.authenticated) { send(ws, { type: 'error', message: 'Entre com um nick antes de usar o serviço.' }); return; }
     if (msg.type === 'logout') { removeClient(ws); try { ws.close(1000, 'logout'); } catch {} return; }
     if (msg.type === 'ping') { send(ws, { type: 'pong', at: Date.now() }); return; }
+    if (msg.type === 'score-update') {
+      session.points = Math.max(0, Math.min(100000000, Math.floor(Number(msg.points) || 0)));
+      session.wins = Math.max(0, Math.min(1000000, Math.floor(Number(msg.wins) || 0)));
+      session.credits = Math.max(0, Math.min(100000000, Math.floor(Number(msg.credits) || 0)));
+      broadcastPresence();
+      return;
+    }
     if (msg.type === 'room-register') {
       const code = String(msg.code || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24);
       const peerId = String(msg.peerId || '').trim().slice(0, 100);
