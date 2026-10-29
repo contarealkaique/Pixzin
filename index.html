@@ -43,7 +43,15 @@ body{background:radial-gradient(ellipse at 50% -15%,#6b202a55,transparent 47%),r
 
 /* Esconde somente widgets flutuantes de WhatsApp injetados fora do fluxo da página. */
 #whatsapp-float, #whatsappFloat, #whatsapp-button, #whatsappButton, .whatsapp-float, .whatsapp-float-button, .floating-whatsapp, .wa-float, .wa-float-button, .whatsapp-widget { display:none !important; }
-</style><script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script></head><body><main class="wrap">
+
+#pixzinWaitOverlay{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;background:rgba(7,8,18,.82);backdrop-filter:blur(7px);padding:20px}
+#pixzinWaitCard{width:min(360px,100%);border:1px solid rgba(255,255,255,.18);border-radius:22px;background:linear-gradient(145deg,#17182b,#090a13);padding:28px 24px;text-align:center;box-shadow:0 18px 70px #0009;color:#fff}
+#pixzinWaitSpinner{width:42px;height:42px;border:4px solid #ffffff2b;border-top-color:#f8cb58;border-radius:50%;margin:0 auto 16px;animation:pzspin .8s linear infinite}
+#pixzinWaitCount{font-size:32px;font-weight:800;color:#f8cb58;margin:8px 0}
+#pixzinWaitText{font-size:14px;line-height:1.45;color:#ddd}
+@keyframes pzspin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#pixzinWaitSpinner{animation:none}}
+</style><script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script></head><body><div id="pixzinWaitOverlay" role="status" aria-live="polite"><div id="pixzinWaitCard"><div id="pixzinWaitSpinner"></div><div style="font-weight:800;letter-spacing:.08em">PIXZIN VEGAS</div><div id="pixzinWaitCount">3</div><div id="pixzinWaitText">Organizando a solicitação para evitar ações simultâneas…</div></div></div><main class="wrap">
 <header class="top"><div class="brand"><div class="logo">P</div><span>pixzin<span style="color:var(--gold)">.</span></span></div><div class="header-tools"><div class="pill"><span class="dot"></span> <span id="headerStatus">ENTRADA DE JOGADORES</span></div><span id="onlineCount" class="online-count" title="Jogadores online">0 online</span><span id="headerUser" class="pill" style="display:none"></span></div></header>
 <section id="loginScreen" class="login-card"><div class="login-mark">P</div><div class="eyebrow" style="margin-top:20px">Entre na resenha</div><h1>Seu nick.<br><span style="color:var(--gold)">Sua mesa.</span></h1><p>Entre com seu nick. O progresso local fica salvo neste navegador mesmo depois de fechar a aba. O ranking online continua mostrando apenas quem está conectado.</p><label for="loginUsername" class="muted">Nome de usuário</label><input id="loginUsername" class="field" maxlength="18" autocomplete="username" placeholder="Ex.: Kaique" style="margin-top:7px;width:100%"><label for="loginPassword" class="muted" style="display:block;margin-top:12px">Senha (mínimo 10 caracteres)</label><input id="loginPassword" class="field" type="password" minlength="10" maxlength="128" autocomplete="current-password" placeholder="Sua senha" style="margin-top:7px;width:100%"><div id="usernameStatus" class="login-state" aria-live="polite">Crie uma conta ou entre para recuperar seu progresso em qualquer dispositivo.</div><div class="playbuttons" style="display:grid;grid-template-columns:1fr 1fr"><button id="loginBtn" class="btn primary" onclick="loginPixzin()">Entrar ↗</button><button id="registerBtn" class="btn secondary" onclick="registerPixzin()">Criar conta</button></div><div class="notice"><b>Conta permanente:</b> fichas, pontos e vitórias são salvos no servidor. Sua senha nunca aparece no ranking; o servidor guarda apenas um hash seguro.</div></section>
 <nav id="appNav" class="appnav" style="display:none" aria-label="Navegação principal"><button class="navtab active" data-view="home" onclick="setView('home')">⌂ Início</button><button class="navtab" data-view="games" onclick="setView('games')">♠ Jogos</button><button class="navtab" data-view="rooms" onclick="setView('rooms')">◎ Salas</button><button class="navtab" data-view="profile" onclick="setView('profile')">♙ Minha conta</button></nav>
@@ -216,18 +224,26 @@ function handlePresenceMessage(msg){
 }
 
 let pixzinAuthToken = '';
-function apiBaseUrl(){ return SIGNAL_SERVER_URL.replace(/^wss:/i,'https:').replace(/^ws:/i,'http:').replace(/\/$/,''); }
+function apiBaseUrl(){ return '/.netlify/functions/accounts'; }
+let pixzinWaitBusy=false;
+async function showPixzinWait(label){
+ if(pixzinWaitBusy) throw new Error('Já existe uma solicitação em andamento nesta tela. Aguarde terminar.');
+ pixzinWaitBusy=true;const overlay=document.getElementById('pixzinWaitOverlay'), count=document.getElementById('pixzinWaitCount'), txt=document.getElementById('pixzinWaitText');
+ if(overlay){overlay.style.display='flex';txt.textContent=label||'Organizando a solicitação para evitar ações simultâneas…';}
+ for(let n=3;n>=1;n--){if(count)count.textContent=String(n);await new Promise(r=>setTimeout(r,500));}
+ if(count)count.textContent='…';if(txt)txt.textContent='Conferindo os dados com segurança. Não feche esta tela.';
+}
+function hidePixzinWait(){const overlay=document.getElementById('pixzinWaitOverlay');if(overlay)overlay.style.display='none';pixzinWaitBusy=false;}
 async function accountRequest(path, payload){
- const endpoint=apiBaseUrl()+path;
- let response;
+ await showPixzinWait(path.endsWith('/register')?'Preparando sua conta com segurança…':path.endsWith('/login')?'Verificando usuário e senha…':'Salvando seus dados…');
+ const endpoint=apiBaseUrl()+'?action='+encodeURIComponent(path.split('/').pop());let response;
  try {
-   response=await fetch(endpoint,{method:payload?'POST':'GET',mode:'cors',cache:'no-store',headers:{'content-type':'application/json',...(pixzinAuthToken?{authorization:'Bearer '+pixzinAuthToken}:{})},body:payload?JSON.stringify(payload):undefined});
- } catch (err) {
-   throw new Error('Falha de conexão (Failed to fetch). Abra https://pixzin.onrender.com/health. Se não aparecer status ok/storage json-file, o Render ainda não recebeu o servidor de contas. Se abrir, confira no Render a variável SITE_ORIGIN: ela deve ser exatamente https://pixzin.netlify.app (ou o domínio atual do seu site), sem barra final. Depois faça redeploy do serviço Render.');
- }
- const data=await response.json().catch(()=>({error:'O servidor respondeu em formato inesperado. Confira a implantação do backend no Render.'}));
- if(!response.ok) throw new Error(data.error||('Falha na solicitação ('+response.status+').'));
- return data;
+   response=await fetch(endpoint,{method:payload?'POST':'GET',cache:'no-store',headers:{'content-type':'application/json',...(pixzinAuthToken?{authorization:'Bearer '+pixzinAuthToken}:{})},body:payload?JSON.stringify(payload):undefined,signal:AbortSignal.timeout(15000)});
+   const data=await response.json().catch(()=>({error:'Resposta inválida do Netlify Functions.'}));
+   if(!response.ok) throw new Error(data.error||('Falha na solicitação ('+response.status+').'));
+   return data;
+ } catch(err){if(err.name==='TimeoutError'||err.name==='AbortError')throw new Error('A solicitação demorou demais. O carregamento foi encerrado; tente novamente.');throw err;}
+ finally{hidePixzinWait();}
 }
 async function registerPixzin(){
  const username=cleanName($('loginUsername').value), password=$('loginPassword').value;
@@ -245,7 +261,7 @@ async function loginAccount(){
  catch(e){$('usernameStatus').textContent=e.message;$('loginBtn').disabled=false;$('registerBtn').disabled=false;}
 }
 function loginPixzin(){loginAccount()}
-function logoutPixzin(){try{if(pixzinAuthToken)fetch(apiBaseUrl()+'/api/logout',{method:'POST',headers:{authorization:'Bearer '+pixzinAuthToken}})}catch(e){}pixzinAuthToken='';sessionStorage.removeItem('pixzin_auth_token');sessionStorage.removeItem('pixzin_auth_user');if(presenceSocket&&presenceSocket.readyState===WebSocket.OPEN){try{presenceSocket.send(JSON.stringify({type:'logout'}))}catch(e){}}if(peer)leaveRoom(false);try{if(presencePeer)presencePeer.destroy()}catch(e){}presencePeer=null;if(presenceSocket){try{presenceSocket.close()}catch(e){}presenceSocket=null}presenceReady=false;loggedIn=false;currentUsername='';myName='';$('mainApp').style.display='none';$('appNav').style.display='none';$('headerUser').style.display='none';$('headerStatus').textContent='ENTRADA DE JOGADORES';$('loginScreen').style.display='block';$('loginUsername').value='';$('usernameStatus').textContent='Você saiu. Escolha um nick para entrar novamente.';$('loginBtn').disabled=false}
+function logoutPixzin(){try{if(pixzinAuthToken)fetch(apiBaseUrl()+'?action=logout',{method:'POST',headers:{authorization:'Bearer '+pixzinAuthToken}})}catch(e){}pixzinAuthToken='';sessionStorage.removeItem('pixzin_auth_token');sessionStorage.removeItem('pixzin_auth_user');if(presenceSocket&&presenceSocket.readyState===WebSocket.OPEN){try{presenceSocket.send(JSON.stringify({type:'logout'}))}catch(e){}}if(peer)leaveRoom(false);try{if(presencePeer)presencePeer.destroy()}catch(e){}presencePeer=null;if(presenceSocket){try{presenceSocket.close()}catch(e){}presenceSocket=null}presenceReady=false;loggedIn=false;currentUsername='';myName='';$('mainApp').style.display='none';$('appNav').style.display='none';$('headerUser').style.display='none';$('headerStatus').textContent='ENTRADA DE JOGADORES';$('loginScreen').style.display='block';$('loginUsername').value='';$('usernameStatus').textContent='Você saiu. Escolha um nick para entrar novamente.';$('loginBtn').disabled=false}
 function setView(view){if(!loggedIn)return;document.querySelectorAll('.navtab').forEach(b=>b.classList.toggle('active',b.dataset.view===view));const home=['.hero','.home-stats','.daily-card'];home.forEach(sel=>document.querySelectorAll(sel).forEach(el=>el.style.display=view==='home'?'':'none'));$('tabela-valores').style.display=view==='games'?'':'none';$('jogos').style.display=view==='games'?'':'none';$('gamepanel').style.display=view==='games'&&$('gamepanel').classList.contains('show')?'block':'none';$('salas').style.display=view==='rooms'?'':'none';$('profileScreen').classList.toggle('show',view==='profile');if($('quickInviteSection'))$('quickInviteSection').style.display=view==='home'?'':'none';if($('onlineRanking'))$('onlineRanking').style.display=(view==='home'||view==='profile')?'':'none';if(view==='games')filterGames('all',document.querySelector('.games-tabs button'));if(view==='rooms'&&new URL(location.href).searchParams.has('sala'))setTimeout(()=>$('guestName').focus({preventScroll:true}),100)}
 function filterGames(category,btn){document.querySelectorAll('.games-tabs button').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');document.querySelectorAll('.game[data-category]').forEach(card=>{const match=category==='all'||category===card.dataset.category||category===card.dataset.mode;card.style.display=match?'':'none'})}
 window.addEventListener('beforeunload',()=>{try{if(presenceSocket&&presenceSocket.readyState===WebSocket.OPEN)presenceSocket.send(JSON.stringify({type:'queue-leave'}));if(presencePeer)presencePeer.destroy()}catch(e){}});
