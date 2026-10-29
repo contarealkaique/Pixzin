@@ -1,29 +1,34 @@
-PIXZIN VEGAS — PROTÓTIPO NETLIFY BLOBS (TESTE)
-============================================
+PIXZIN VEGAS — PROTÓTIPO GITHUB + NETLIFY
+=========================================
 
-O que este protótipo adiciona
-- Função serverless em netlify/functions/accounts.mjs usando Netlify Blobs.
-- Limite de 10 contas e nomes de usuário únicos.
-- Senhas derivadas com scrypt e sessões com tokens aleatórios.
-- Tela de espera com contagem regressiva curta, mensagens de status e timeout para não deixar o carregamento preso.
-- Tentativa de serialização das operações de conta com lease temporário e novas tentativas.
-- Preserva o HTML e os jogos originais.
+O que este ZIP inclui
+- Tela de entrada com nome + chave permanente.
+- Criação de conta gera uma chave única, mostra-a uma única vez e tenta copiá-la.
+- Limite de 10 contas, nomes únicos e armazenamento dos hashes das chaves.
+- Função Netlify que guarda o estado num JSON privado no repositório via GitHub Contents API.
+- Espera curta, timeout e tratamento de conflitos para evitar que o carregamento fique preso.
 
-IMPORTANTE — PROTÓTIPO, NÃO SUBSTITUA A VERSÃO PUBLICADA AINDA
-O bloqueio em Netlify Blobs é de melhor esforço: Blobs não fornece lock transacional/compare-and-swap, então a contagem regressiva NÃO garante matematicamente que duas requisições simultâneas nunca passem juntas. O limite de 10 contas e a espera reduzem o risco, mas não equivalem a um banco transacional.
+ANTES DE TESTAR: CONFIGURAÇÃO OBRIGATÓRIA NO NETLIFY
+No Netlify > Site configuration > Environment variables, crie:
+1) GITHUB_TOKEN = token fine-grained do GitHub com Contents: Read and write APENAS no repositório do projeto.
+2) GITHUB_OWNER = seu usuário/organização do GitHub.
+3) GITHUB_REPO = nome exato do repositório conectado.
+4) GITHUB_BRANCH = nome da branch publicada (normalmente main).
+5) PIXZIN_DATA_PATH = data/pixzin-accounts.json (opcional; pode usar este valor).
+Depois faça um novo deploy para as funções receberem as variáveis. NUNCA coloque GITHUB_TOKEN no index.html, no ZIP público ou em mensagens.
 
-A integração atual de presença, salas ao vivo e PeerJS do HTML original ainda aponta para wss://pixzin.onrender.com. O servidor Render original valida tokens no seu próprio arquivo JSON. Como este protótipo passa login/cadastro para Netlify Blobs, a autenticação com o serviço de presença do Render ainda precisa de uma ponte de validação para funcionar de ponta a ponta. Não interprete o protótipo como migração concluída do multiplayer nem como garantia de saldo seguro.
+ATENÇÃO À PRIVACIDADE
+O arquivo JSON de dados precisa ficar em repositório PRIVADO. Se o repositório for público, nomes, saldos e hashes podem ficar expostos. Use token fine-grained com permissão mínima e revogue-o se vazar.
 
-COMO TESTAR NO NETLIFY
-1. Faça uma cópia/branch do projeto antes de publicar.
-2. Envie estes arquivos ao repositório GitHub que será conectado ao Netlify.
-3. No Netlify, configure a implantação contínua desse repositório. O netlify.toml aponta a pasta de funções.
-4. Faça deploy e teste primeiro cadastro com uma conta de teste, login, nome duplicado e o limite de contas.
-5. Não use senhas importantes nem dados reais neste protótipo.
+LIMITAÇÕES IMPORTANTES
+- GitHub Contents API é um armazenamento experimental, não um banco transacional. O código tenta detectar conflitos e repetir a gravação, mas não pode prometer integridade perfeita sob concorrência. A contagem regressiva na tela é apenas UX, não um bloqueio global confiável.
+- Este ZIP NÃO é uma migração completa do multiplayer: a conexão de presença e salas ainda depende do servidor WSS/Render configurado no HTML. O token emitido por esta função não é reconhecido automaticamente pelo servidor Render antigo. Assim, cadastro/login de conta no Netlify pode funcionar após configurar variáveis, mas salas multiplayer podem falhar até integrar a autenticação com o servidor de presença.
+- O saldo e inventário atuais do jogo ainda têm lógica local no navegador; não trate este protótipo como seguro para valores reais. Os créditos são fictícios.
+- Nenhuma chave de usuário pode ser pré-entregue antes de a conta ser criada: cada chave é gerada no cadastro e exibida uma única vez. Se perder a chave, o protótipo não tem recuperação automática.
 
-O Netlify Functions instala as dependências do package.json durante o build. Não coloque tokens secretos no index.html. O Netlify Blobs usa o contexto do site dentro das funções, sem precisar expor uma chave no navegador.
-
-RECURSOS AINDA NÃO VALIDOS COMO PRONTOS
-- Integração de tokens do Blobs com o WebSocket/PeerJS Render.
-- Escritas transacionais de saldo/inventário contra duas requisições simultâneas.
-- Teste real de deploy neste ambiente.
+TESTE SEGURO
+1. Mantenha o site atual guardado.
+2. Configure as variáveis no Netlify e publique este ZIP numa branch/site de teste.
+3. Crie uma conta de teste e guarde a chave exibida.
+4. Saia e teste login com nome + chave.
+5. Não crie contas reais antes de confirmar a configuração e a integração de presença.
